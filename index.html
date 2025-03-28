@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full AGC Implementation</title>
+    <style>
+        /* Tambahkan CSS sebelumnya disini */
+        #contentFrame {
+            width: 100%;
+            height: 80vh;
+            border: 1px solid #ccc;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Form sebelumnya disini -->
+    
+    <div id="contentContainer"></div>
+
+    <script>
+        // Handle form submit dengan proxy
+        document.getElementById('agcForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const targetUrl = document.getElementById('urlInput').value;
+            await loadProxiedContent(targetUrl);
+        });
+
+        async function loadProxiedContent(targetUrl, path = '/') {
+            try {
+                const encodedUrl = encodeURIComponent(targetUrl);
+                const proxyPath = `/agc/${encodedUrl}${path}`;
+                
+                // Fetch konten melalui proxy server
+                const response = await fetch(`https://cors-anywhere.herokuapp.com/${targetUrl}${path}`);
+                let content = await response.text();
+                
+                // Rewrite URLs
+                const proxyDomain = `${window.location.origin}/agc/${encodedUrl}`;
+                content = content.replace(
+                    new RegExp(targetUrl, 'gi'),
+                    proxyDomain
+                );
+
+                // Handle different content types
+                const contentType = response.headers.get('content-type');
+                
+                if (contentType.includes('text/html')) {
+                    // Buat iframe tersembunyi untuk menampilkan konten
+                    const iframe = document.createElement('iframe');
+                    iframe.id = 'contentFrame';
+                    iframe.srcdoc = content;
+                    iframe.onload = () => {
+                        // Rewrite semua link dalam iframe
+                        Array.from(iframe.contentDocument.querySelectorAll('a')).forEach(link => {
+                            const originalHref = link.getAttribute('href');
+                            link.href = `javascript:void(0)" onclick="window.parent.navigateTo('${targetUrl}', '${originalHref}')`;
+                        });
+                    };
+                    
+                    document.getElementById('contentContainer').innerHTML = '';
+                    document.getElementById('contentContainer').appendChild(iframe);
+                } else {
+                    // Handle other content types (CSS, JS, images)
+                    const blob = new Blob([content], { type: contentType });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url);
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Gagal memuat konten');
+            }
+        }
+
+        // Navigation handler
+        window.navigateTo = (targetUrl, path) => {
+            loadProxiedContent(targetUrl, path);
+        };
+
+        // Initial load handler
+        if (window.location.pathname.startsWith('/agc/')) {
+            const pathSegments = window.location.pathname.split('/agc/')[1].split('/');
+            const targetUrl = decodeURIComponent(pathSegments[0]);
+            const path = `/${pathSegments.slice(1).join('/')}`;
+            loadProxiedContent(targetUrl, path);
+        }
+    </script>
+</body>
+</html>
